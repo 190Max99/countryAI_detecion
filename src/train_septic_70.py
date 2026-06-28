@@ -1,14 +1,3 @@
-"""
-房前屋后场景模型训练脚本。
-从 all_labels.csv 中取出前70组（按 house_id 排序）房前屋后数据作为训练集，
-基于 ResNet18 进行多标签分类训练，剩余数据保存为 holdout 验证集。
-
-训练策略：冻结 backbone 只训练分类头（适合小数据集），使用 BCEWithLogitsLoss +
-pos_weight 处理标签不均衡，保存训练损失最低的模型。
-
-用法: python train_outside_70.py [--csv <CSV路径>] [--epochs 40] [--train_num 70]
-"""
-
 import argparse
 import copy
 from pathlib import Path
@@ -24,33 +13,27 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import models, transforms
 
 
-SCENE_NAME = "房前屋后"
+SCENE_NAME = "化粪池"
 
 LABEL_NAMES = [
-    "D0_房屋旁柴草堆码乱堆不整齐",
-    "D1_房屋周身存在污水横流现象",
-    "D2_房屋周身瓜果棚架破败不堪",
-    "D3_房屋周身鸡鸭棚圈破败不堪脏臭",
-    "D4_房屋周身其他情况",
+    "C2_化粪池盖板挪开未关闭取粪口未关闭",
+    "C3_化粪池粪污溢流",
+    "C4_厕所周围其他情况",
 ]
 
-LABEL_COLS = [f"label_{i}" for i in range(5)]
+LABEL_COLS = [f"label_{i}" for i in range(3)]
 
-DEDUCTS = [3, 2, 2, 2, 1]
+DEDUCTS = [2, 2, 1]
 
 THRESHOLDS = np.array([
-    0.55,  # D0 柴草堆码乱堆、不整齐
-    0.50,  # D1 污水横流
-    0.50,  # D2 瓜果棚架破败
-    0.50,  # D3 鸡鸭棚圈破败、脏臭
-    0.65,  # D4 其他情况
+    0.50,  # C2 化粪池盖板挪开未关闭，取粪口未关闭
+    0.50,  # C3 化粪池粪污溢流
+    0.65,  # C4 厕所周围其他情况
 ])
 
 
 def read_csv_safely(csv_path: Path):
-    """尝试多种编码读取 CSV，兼容 Excel/WPS 导出的中文文件。"""
     encodings = ["utf-8-sig", "gbk", "gb18030", "utf-8"]
-
     last_error = None
 
     for enc in encodings:
@@ -68,11 +51,6 @@ def read_csv_safely(csv_path: Path):
 
 
 def sort_house_id(value):
-    """
-    尽量按照数字顺序排序。
-    例如 1,2,3,...,70。
-    如果 house_id 不是纯数字，也能兼容。
-    """
     text = str(value).strip()
 
     try:
@@ -81,8 +59,7 @@ def sort_house_id(value):
         return text
 
 
-class OutsideDataset(Dataset):
-    """房前屋后场景的自定义 Dataset，从 DataFrame 中读取图片和标签。返回矩阵"""
+class SepticDataset(Dataset):
     def __init__(self, df, transform=None):
         self.df = df.reset_index(drop=True)
         self.transform = transform
@@ -104,11 +81,7 @@ class OutsideDataset(Dataset):
         return image, torch.tensor(labels)
 
 
-def build_model(num_labels=5, freeze_backbone=True):
-    """
-    使用 ResNet18 作为多标签分类模型。
-    小数据集建议 freeze_backbone=True，只训练最后分类层。
-    """
+def build_model(num_labels=3, freeze_backbone=True):
     try:
         weights = models.ResNet18_Weights.DEFAULT
         model = models.resnet18(weights=weights)
@@ -117,7 +90,7 @@ def build_model(num_labels=5, freeze_backbone=True):
         print("预训练权重加载失败，将使用随机初始化。原因：", e)
         model = models.resnet18(weights=None)
 
-    if freeze_backbone:                              #冻结前面的参数，只训练最后一层。
+    if freeze_backbone:
         for param in model.parameters():
             param.requires_grad = False
 
@@ -128,18 +101,17 @@ def build_model(num_labels=5, freeze_backbone=True):
 
 
 def get_train_transform():
-    """训练数据增强：随机裁剪、翻转、旋转、颜色抖动 + 归一化。（预处理）"""
     return transforms.Compose([
-        transforms.Resize((256, 256)),  #不同大小的图片先统一缩放到 256×256
-        transforms.RandomResizedCrop(224, scale=(0.75, 1.0)),  #随机裁剪成 224×224。
-        transforms.RandomHorizontalFlip(p=0.5), 
+        transforms.Resize((256, 256)),
+        transforms.RandomResizedCrop(224, scale=(0.75, 1.0)),
+        transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(8),
         transforms.ColorJitter(
             brightness=0.25,
             contrast=0.25,
             saturation=0.15
         ),
-        transforms.ToTensor(),         #把图片从 PIL 格式变成 PyTorch 的 Tensor
+        transforms.ToTensor(),
         transforms.Normalize(
             mean=[0.485, 0.456, 0.406],
             std=[0.229, 0.224, 0.225]
@@ -148,10 +120,6 @@ def get_train_transform():
 
 
 def make_pos_weight(train_df):
-    """
-    处理标签不均衡。
-    某个扣分项正样本越少，它的权重会越大。
-    """
     labels = train_df[LABEL_COLS].values.astype("float32")
 
     pos = labels.sum(axis=0)
@@ -171,20 +139,17 @@ def make_pos_weight(train_df):
 
 
 def calc_score(labels):
-    """根据预测标签计算扣分和最终得分（满分10分）。"""
     total_deduct = 0
 
     for flag, deduct in zip(labels, DEDUCTS):
         if int(flag) == 1:
             total_deduct += deduct
 
-    final_score = max(0, 10 - total_deduct)
-
-    return final_score, total_deduct
+    # 注意：化粪池本身不是单独 10 分，而是和厕所一起组成“厕所及化粪池 10 分”
+    return total_deduct
 
 
 def main():
-    """数据准备、模型构建、训练循环、保存最佳模型。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", default="data/all_labels.csv")
     parser.add_argument("--epochs", type=int, default=40)
@@ -201,7 +166,6 @@ def main():
         raise FileNotFoundError(f"找不到 CSV 文件: {csv_path}")
 
     df = read_csv_safely(csv_path)
-
     df.columns = [str(c).strip() for c in df.columns]
 
     required_cols = ["house_id", "scene", "image_path"] + LABEL_COLS
@@ -212,22 +176,21 @@ def main():
 
     df["scene"] = df["scene"].astype(str).str.strip()
 
-    outside_df = df[df["scene"] == SCENE_NAME].copy()
+    septic_df = df[df["scene"] == SCENE_NAME].copy()
 
-    if len(outside_df) == 0:
+    if len(septic_df) == 0:
         print("当前 CSV 中的 scene 唯一值：")
         print(df["scene"].unique())
         raise ValueError(f"CSV 里没有找到 scene == {SCENE_NAME} 的数据")
 
     for col in LABEL_COLS:
-        outside_df[col] = outside_df[col].fillna(0).astype(int)
+        septic_df[col] = septic_df[col].fillna(0).astype(int)
 
-    outside_df["image_path"] = outside_df["image_path"].astype(str)
+    septic_df["image_path"] = septic_df["image_path"].astype(str)
 
-    # 检查图片是否存在
     valid_rows = []
 
-    for _, row in outside_df.iterrows():
+    for _, row in septic_df.iterrows():
         image_path = Path(row["image_path"])
 
         if image_path.exists():
@@ -235,24 +198,22 @@ def main():
         else:
             print("图片不存在，已跳过:", row["image_path"])
 
-    outside_df = pd.DataFrame(valid_rows)
+    septic_df = pd.DataFrame(valid_rows)
 
-    if len(outside_df) == 0:
-        raise ValueError("没有可用的房前屋后图片，请检查 image_path")
+    if len(septic_df) == 0:
+        raise ValueError("没有可用的化粪池图片，请检查 image_path")
 
-    # 按 house_id 排序，保证取前70组
-    outside_df["house_sort_key"] = outside_df["house_id"].apply(sort_house_id)
-    outside_df = outside_df.sort_values(by="house_sort_key").reset_index(drop=True)
+    septic_df["house_sort_key"] = septic_df["house_id"].apply(sort_house_id)
+    septic_df = septic_df.sort_values(by="house_sort_key").reset_index(drop=True)
 
-    # 每个 house_id 一般只有一张房前屋后图，这里按行取前70
-    train_df = outside_df.iloc[:args.train_num].copy()
-    holdout_df = outside_df.iloc[args.train_num:].copy()
+    train_df = septic_df.iloc[:args.train_num].copy()
+    holdout_df = septic_df.iloc[args.train_num:].copy()
 
     if len(train_df) < args.train_num:
-        print(f"警告：当前可用房前屋后数据只有 {len(train_df)} 张，不足 {args.train_num} 张")
+        print(f"警告：当前可用化粪池数据只有 {len(train_df)} 张，不足 {args.train_num} 张")
 
     holdout_df.drop(columns=["house_sort_key"], errors="ignore").to_csv(
-        "outside_holdout_rows.csv",
+        "septic_holdout_rows.csv",
         index=False,
         encoding="utf-8-sig"
     )
@@ -260,26 +221,25 @@ def main():
     train_df = train_df.drop(columns=["house_sort_key"], errors="ignore")
 
     print("\n========== 数据划分 ==========")
-    print("房前屋后总图片数量:", len(outside_df))
+    print("化粪池总图片数量:", len(septic_df))
     print("训练图片数量:", len(train_df))
     print("保留验证图片数量:", len(holdout_df))
-    print("保留验证数据已保存: outside_holdout_rows.csv")
+    print("保留验证数据已保存: septic_holdout_rows.csv")
 
     print("\n训练用 house_id:")
     print(train_df["house_id"].tolist())
 
-    print("\n房前屋后标签正样本数量:")
+    print("\n化粪池标签正样本数量:")
     for col, name in zip(LABEL_COLS, LABEL_NAMES):
         print(f"{col} {name}: {int(train_df[col].sum())}")
 
-    # 如果某个标签全是0，提示一下
     print("\n标签检查:")
     for col, name in zip(LABEL_COLS, LABEL_NAMES):
         pos_count = int(train_df[col].sum())
         if pos_count == 0:
-            print(f"警告：{col} {name} 在前70组训练集中没有正样本，模型很难学会这个标签")
+            print(f"警告：{col} {name} 在前 {len(train_df)} 组训练集中没有正样本，模型很难学会这个标签")
 
-    train_dataset = OutsideDataset(
+    train_dataset = SepticDataset(
         train_df,
         transform=get_train_transform()
     )
@@ -316,7 +276,7 @@ def main():
     model_dir = Path("models")
     model_dir.mkdir(exist_ok=True)
 
-    save_path = model_dir / "outside_resnet18.pth"
+    save_path = model_dir / "septic_resnet18.pth"
 
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -339,7 +299,6 @@ def main():
 
         print(f"Epoch {epoch}: train_loss={train_loss:.4f}")
 
-        # 因为剩余数据要留到后续验证，这里只根据训练损失保存
         if train_loss < best_train_loss:
             best_train_loss = train_loss
 
@@ -361,8 +320,8 @@ def main():
     print("最佳训练损失:", best_train_loss)
     print("模型保存位置:", save_path)
 
-    print("\n下一步你可以用剩余数据验证：")
-    print("outside_holdout_rows.csv")
+    print("\n下一步可以用剩余数据验证：")
+    print("septic_holdout_rows.csv")
 
 
 if __name__ == "__main__":

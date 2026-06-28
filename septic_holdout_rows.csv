@@ -1,0 +1,11 @@
+﻿house_id,scene,image_path,label_0,label_1,label_2,label_3,label_4,label_5,label_6,label_7,label_8,label_9,label_10,label_11
+71,化粪池,data/raw/71/化粪池_71.jpg,0,0,0,,,,,,,,,
+72,化粪池,data/raw/72/化粪池_72.jpg,0,0,0,,,,,,,,,
+73,化粪池,data/raw/73/化粪池_73.jpg,0,0,0,,,,,,,,,
+74,化粪池,data/raw/74/化粪池_74.jpg,1,0,1,,,,,,,,,
+75,化粪池,data/raw/75/化粪池_75.jpg,1,0,1,,,,,,,,,
+76,化粪池,data/raw/76/化粪池_76.jpg,1,0,1,,,,,,,,,
+77,化粪池,data/raw/77/化粪池_77.jpg,1,0,0,,,,,,,,,
+78,化粪池,data/raw/78/化粪池_78.jpg,0,0,0,,,,,,,,,
+79,化粪池,data/raw/79/化粪池_79.jpg,0,0,0,,,,,,,,,
+80,化粪池,data/raw/80/化粪池_80.jpg,0,0,0,,,,,,,,,

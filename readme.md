@@ -124,7 +124,11 @@ indoor_test_result.csv
 对当前室内模型重新测评：
 
 ```powershell
-python src/eval_indoor_current.py --csv data/all_labels.csv --model models/indoor_resnet18.pth
+python src/eval_indoor_current.py
+```
+对单个图片进行测评：
+```powershell
+python src/predict_indoor.py --image "data/raw/55/室内_55.jpg"    
 ```
 
 输出结果包括：
