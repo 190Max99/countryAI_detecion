@@ -1,3 +1,11 @@
+"""
+房前屋后模型 holdout 验证脚本。
+读取 outside_holdout_rows.csv（训练时保留的验证数据），用 outside_resnet18.pth 逐张推理，
+对比人工标注与模型预测，输出：标签准确率、F1/Precision/Recall、得分误差等。
+
+用法: python eval_outside_holdout.py [--holdout <holdout CSV>] [--model <模型路径>] [--out <输出CSV>]
+"""
+
 import argparse
 from pathlib import Path
 
@@ -12,10 +20,12 @@ from torchvision import models, transforms
 from sklearn.metrics import f1_score, precision_score, recall_score
 
 
+# 房前屋后场景有 5 个标签列
 LABEL_COLS = [f"label_{i}" for i in range(5)]
 
 
 def build_model(num_labels=5):
+    """构建 ResNet18 多标签分类模型（房前屋后5个标签）。"""
     model = models.resnet18(weights=None)
     in_features = model.fc.in_features
     model.fc = nn.Linear(in_features, num_labels)
@@ -23,6 +33,7 @@ def build_model(num_labels=5):
 
 
 def get_transform():
+    """图像预处理：缩放 224x224、转 Tensor、ImageNet 归一化。"""
     return transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -34,6 +45,7 @@ def get_transform():
 
 
 def load_checkpoint(model_path, device):
+    """兼容 PyTorch 2.6+，显式设置 weights_only=False。"""
     try:
         return torch.load(model_path, map_location=device, weights_only=False)
     except TypeError:
@@ -41,6 +53,7 @@ def load_checkpoint(model_path, device):
 
 
 def calc_score(labels, deducts):
+    """根据标签和扣分值计算最终得分（满分10分，最低0分）。"""
     total_deduct = 0
 
     for flag, deduct in zip(labels, deducts):
@@ -53,6 +66,7 @@ def calc_score(labels, deducts):
 
 
 def main():
+    """加载模型，逐张推理 holdout 图片，对比人工标注输出评估指标。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--holdout", default="outside_holdout_rows.csv")
     parser.add_argument("--model", default="models/outside_resnet18.pth")

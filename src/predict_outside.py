@@ -1,3 +1,11 @@
+"""
+房前屋后场景单张图片预测脚本。
+加载 outside_resnet18.pth 模型，对单张图片进行多标签分类，
+输出每个标签的概率、阈值对比及最终扣分和得分（满分10分）。
+
+用法: python predict_outside.py --image <图片路径> [--model <模型路径>]
+"""
+
 import argparse
 from pathlib import Path
 
@@ -10,6 +18,7 @@ from torchvision import models, transforms
 
 
 def build_model(num_labels=5):
+    """构建 ResNet18 多标签分类模型（房前屋后5个标签）。"""
     model = models.resnet18(weights=None)
     in_features = model.fc.in_features
     model.fc = nn.Linear(in_features, num_labels)
@@ -17,6 +26,7 @@ def build_model(num_labels=5):
 
 
 def get_transform():
+    """图像预处理：缩放到 224x224、转 Tensor、ImageNet 归一化。"""
     return transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -28,6 +38,7 @@ def get_transform():
 
 
 def load_checkpoint(model_path, device):
+    """兼容 PyTorch 2.6+，显式设置 weights_only=False。"""
     try:
         return torch.load(model_path, map_location=device, weights_only=False)
     except TypeError:
@@ -35,6 +46,7 @@ def load_checkpoint(model_path, device):
 
 
 def main():
+    """解析参数、加载模型、单张图片推理并输出评分。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", required=True, help="要测试的房前屋后图片路径")
     parser.add_argument("--model", default="models/outside_resnet18.pth", help="模型路径")

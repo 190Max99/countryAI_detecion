@@ -1,3 +1,11 @@
+"""
+室内场景模型训练与测试脚本。
+从 all_labels.csv 中筛选 scene=室内 的数据，按 8:2 划分训练/测试集，
+基于 ResNet18 进行多标签分类训练，每轮在测试集上评估并保存最佳模型。
+
+用法: python train_test_indoor.py [--csv <CSV路径>] [--epochs 30] [--batch_size 8]
+"""
+
 import argparse
 import copy
 from pathlib import Path
@@ -70,6 +78,7 @@ def read_csv_safely(csv_path: Path):
 
 
 class IndoorDataset(Dataset):
+    """室内场景的自定义 Dataset，从 DataFrame 中读取图片和标签。"""
     def __init__(self, df, transform=None):
         self.df = df.reset_index(drop=True)
         self.transform = transform
@@ -115,6 +124,7 @@ def build_model(num_labels=10, freeze_backbone=True):
 
 
 def get_transforms():
+    """返回 (train_transform, test_transform)，训练用数据增强，测试仅缩放归一化。"""
     train_tf = transforms.Compose([
         transforms.Resize((256, 256)),
         transforms.RandomResizedCrop(224, scale=(0.75, 1.0)),
@@ -168,6 +178,7 @@ def make_pos_weight(train_df):
 
 
 def calc_score(pred_labels):
+    """根据预测标签计算扣分和最终得分（满分10分）。"""
     total_deduct = 0
 
     for flag, deduct in zip(pred_labels, DEDUCTS):

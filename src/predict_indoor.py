@@ -1,3 +1,11 @@
+"""
+室内场景单张图片预测脚本。
+加载 indoor_resnet18.pth 模型，对单张图片进行多标签分类，
+输出每个标签的概率、阈值对比及最终扣分和得分（满分10分）。
+
+用法: python predict_indoor.py --image <图片路径> [--model <模型路径>]
+"""
+
 import argparse
 from pathlib import Path
 
@@ -10,6 +18,7 @@ from torchvision import models, transforms
 
 
 def build_model(num_labels=10):
+    """构建 ResNet18 多标签分类模型，替换最后的全连接层。"""
     model = models.resnet18(weights=None)
     in_features = model.fc.in_features
     model.fc = nn.Linear(in_features, num_labels)
@@ -17,6 +26,7 @@ def build_model(num_labels=10):
 
 
 def get_transform():
+    """图像预处理：缩放到 224x224、转 Tensor、ImageNet 归一化。"""
     return transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -28,6 +38,7 @@ def get_transform():
 
 
 def main():
+    """解析参数、加载模型、单张图片推理并输出评分。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", required=True)
     parser.add_argument("--model", default="models/indoor_resnet18.pth")
@@ -44,6 +55,7 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # 加载 checkpoint：包含模型权重、标签名、扣分值、阈值
     checkpoint = torch.load(model_path, map_location=device)
 
     label_names = checkpoint["label_names"]
@@ -58,6 +70,7 @@ def main():
     image = Image.open(image_path).convert("RGB")
     image_tensor = get_transform()(image).unsqueeze(0).to(device)
 
+    # 推理：sigmoid 输出概率，超过阈值判为扣分
     with torch.no_grad():
         logits = model(image_tensor)
         probs = torch.sigmoid(logits)[0].cpu().numpy()
@@ -87,7 +100,7 @@ def main():
         if is_deduct:
             total_deduct += deducts[i]
 
-    final_score = max(0, 10 - total_deduct)
+    final_score = max(0, 10 - total_deduct)  # 最低0分
 
     print("\n总扣分:", total_deduct)
     print(f"室内得分: {final_score}/10")

@@ -1,3 +1,14 @@
+"""
+房前屋后场景模型训练脚本。
+从 all_labels.csv 中取出前70组（按 house_id 排序）房前屋后数据作为训练集，
+基于 ResNet18 进行多标签分类训练，剩余数据保存为 holdout 验证集。
+
+训练策略：冻结 backbone 只训练分类头（适合小数据集），使用 BCEWithLogitsLoss +
+pos_weight 处理标签不均衡，保存训练损失最低的模型。
+
+用法: python train_outside_70.py [--csv <CSV路径>] [--epochs 40] [--train_num 70]
+"""
+
 import argparse
 import copy
 from pathlib import Path
@@ -37,6 +48,7 @@ THRESHOLDS = np.array([
 
 
 def read_csv_safely(csv_path: Path):
+    """尝试多种编码读取 CSV，兼容 Excel/WPS 导出的中文文件。"""
     encodings = ["utf-8-sig", "gbk", "gb18030", "utf-8"]
 
     last_error = None
@@ -70,6 +82,7 @@ def sort_house_id(value):
 
 
 class OutsideDataset(Dataset):
+    """房前屋后场景的自定义 Dataset，从 DataFrame 中读取图片和标签。"""
     def __init__(self, df, transform=None):
         self.df = df.reset_index(drop=True)
         self.transform = transform
@@ -115,6 +128,7 @@ def build_model(num_labels=5, freeze_backbone=True):
 
 
 def get_train_transform():
+    """训练数据增强：随机裁剪、翻转、旋转、颜色抖动 + 归一化。"""
     return transforms.Compose([
         transforms.Resize((256, 256)),
         transforms.RandomResizedCrop(224, scale=(0.75, 1.0)),
@@ -157,6 +171,7 @@ def make_pos_weight(train_df):
 
 
 def calc_score(labels):
+    """根据预测标签计算扣分和最终得分（满分10分）。"""
     total_deduct = 0
 
     for flag, deduct in zip(labels, DEDUCTS):
@@ -169,6 +184,7 @@ def calc_score(labels):
 
 
 def main():
+    """数据准备、模型构建、训练循环、保存最佳模型。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", default="data/all_labels.csv")
     parser.add_argument("--epochs", type=int, default=40)

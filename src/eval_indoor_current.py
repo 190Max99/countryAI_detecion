@@ -1,3 +1,11 @@
+"""
+室内模型全量验证脚本。
+读取 all_labels.csv 中 scene=室内 的所有数据，用 indoor_resnet18.pth 逐张推理，
+对比人工标注与模型预测，输出：标签准确率、F1/Precision/Recall、得分误差等。
+
+用法: python eval_indoor_current.py [--csv <CSV路径>] [--model <模型路径>] [--out <输出CSV>]
+"""
+
 import argparse
 from pathlib import Path
 
@@ -12,10 +20,12 @@ from torchvision import models, transforms
 from sklearn.metrics import f1_score, precision_score, recall_score
 
 
+# 室内场景有 10 个标签列
 LABEL_COLS = [f"label_{i}" for i in range(10)]
 
 
 def read_csv_safely(csv_path: Path):
+    """尝试多种编码读取 CSV，兼容 Excel/WPS 导出的中文文件。"""
     encodings = ["utf-8-sig", "gbk", "gb18030", "utf-8"]
 
     last_error = None
@@ -34,6 +44,7 @@ def read_csv_safely(csv_path: Path):
 
 
 def build_model(num_labels=10):
+    """构建 ResNet18 多标签分类模型，替换全连接层。"""
     model = models.resnet18(weights=None)
     in_features = model.fc.in_features
     model.fc = nn.Linear(in_features, num_labels)
@@ -41,6 +52,7 @@ def build_model(num_labels=10):
 
 
 def get_transform():
+    """图像预处理：缩放 224x224、转 Tensor、ImageNet 归一化。"""
     return transforms.Compose([
         transforms.Resize((224, 224)),
         transforms.ToTensor(),
@@ -52,6 +64,7 @@ def get_transform():
 
 
 def load_checkpoint(model_path, device):
+    """兼容 PyTorch 2.6+，显式设置 weights_only=False。"""
     try:
         return torch.load(model_path, map_location=device, weights_only=False)
     except TypeError:
@@ -59,6 +72,7 @@ def load_checkpoint(model_path, device):
 
 
 def calc_score(labels, deducts):
+    """根据标签和扣分值计算最终得分（满分10分，最低0分）。"""
     total_deduct = 0
 
     for flag, deduct in zip(labels, deducts):
@@ -71,6 +85,7 @@ def calc_score(labels, deducts):
 
 
 def main():
+    """加载模型，逐张推理室内图片，对比人工标注输出评估指标。"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", default="data/all_labels.csv")
     parser.add_argument("--model", default="models/indoor_resnet18.pth")
@@ -100,6 +115,7 @@ def main():
 
     df["scene"] = df["scene"].astype(str).str.strip()
 
+    # 筛选室内场景数据
     indoor_df = df[df["scene"] == "室内"].copy()
 
     if len(indoor_df) == 0:
@@ -115,6 +131,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("\n当前设备:", device)
 
+    # 加载 checkpoint：包含权重、标签名、扣分值、阈值
     checkpoint = load_checkpoint(model_path, device)
 
     label_names = checkpoint["label_names"]
@@ -143,12 +160,13 @@ def main():
         image = Image.open(image_path).convert("RGB")
         image_tensor = tf(image).unsqueeze(0).to(device)
 
+        # 推理 + sigmoid 得到概率
         with torch.no_grad():
             logits = model(image_tensor)
             probs = torch.sigmoid(logits)[0].cpu().numpy()
 
         true_labels = row[LABEL_COLS].values.astype(int)
-        pred_labels = (probs >= thresholds).astype(int)
+        pred_labels = (probs >= thresholds).astype(int)  # 阈值判断
 
         true_score, true_deduct = calc_score(true_labels, deducts)
         pred_score, pred_deduct = calc_score(pred_labels, deducts)
@@ -183,6 +201,7 @@ def main():
     result_df = pd.DataFrame(result_rows)
     result_df.to_csv(args.out, index=False, encoding="utf-8-sig")
 
+    # 整体指标计算
     label_acc = (y_true == y_pred).mean()
     exact_match = np.mean([np.array_equal(t, p) for t, p in zip(y_true, y_pred)])
 
