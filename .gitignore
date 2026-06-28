@@ -1,0 +1,47 @@
+@"
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# virtual environment
+venv/
+.venv/
+env/
+.env/
+
+# IDE
+.vscode/
+.idea/
+
+# data
+data/raw/
+data/processed/
+data/*.csv
+!data/sample/
+!data/sample/*.csv
+
+# models
+models/
+*.pth
+*.pt
+*.onnx
+
+# outputs / results
+outputs/
+*_result.csv
+*_eval*.csv
+outside_holdout_rows.csv
+outside_holdout_eval_result.csv
+indoor_test_result.csv
+indoor_eval_current_result.csv
+
+# logs
+logs/
+*.log
+
+# system
+.DS_Store
+Thumbs.db
+"@ | Set-Content .gitignore -Encoding UTF8
