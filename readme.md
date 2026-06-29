@@ -233,6 +233,12 @@ python src/predict_outside.py --image "data/raw/71/房前屋后_71.jpg"
 
 这种方式比直接预测分数更容易解释，也便于人工复核。
 
+## 十一、 输入房屋文件夹并整体测评
+
+```powershell
+python -m src.predict_folder_total --folder data/raw/5
+```
+
 ## 十一、Git 管理说明
 
 本项目使用 Git 管理代码，但不管理大文件。
