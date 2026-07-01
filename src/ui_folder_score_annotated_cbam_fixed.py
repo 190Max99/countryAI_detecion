@@ -13,13 +13,161 @@ from torchvision import models, transforms
 
 
 # =========================
+# 0. CBAM 注意力模型
+# =========================
+
+class ChannelAttention(nn.Module):
+    """
+    通道注意力：
+    判断哪些特征通道更重要。
+    """
+
+    def __init__(self, in_channels, reduction=16):
+        super().__init__()
+
+        hidden_channels = max(in_channels // reduction, 1)
+
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+
+        self.mlp = nn.Sequential(
+            nn.Conv2d(in_channels, hidden_channels, kernel_size=1, bias=False),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(hidden_channels, in_channels, kernel_size=1, bias=False),
+        )
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        avg_out = self.mlp(self.avg_pool(x))
+        max_out = self.mlp(self.max_pool(x))
+        attention = self.sigmoid(avg_out + max_out)
+        return x * attention
+
+
+class SpatialAttention(nn.Module):
+    """
+    空间注意力：
+    判断图片中哪些区域更重要。
+    """
+
+    def __init__(self, kernel_size=7):
+        super().__init__()
+
+        padding = kernel_size // 2
+
+        self.conv = nn.Conv2d(
+            in_channels=2,
+            out_channels=1,
+            kernel_size=kernel_size,
+            padding=padding,
+            bias=False,
+        )
+
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+
+        attention_input = torch.cat([avg_out, max_out], dim=1)
+        attention = self.sigmoid(self.conv(attention_input))
+
+        return x * attention
+
+
+class CBAM(nn.Module):
+    """
+    CBAM = 通道注意力 + 空间注意力。
+    """
+
+    def __init__(self, in_channels, reduction=16, kernel_size=7):
+        super().__init__()
+
+        self.channel_attention = ChannelAttention(
+            in_channels=in_channels,
+            reduction=reduction,
+        )
+
+        self.spatial_attention = SpatialAttention(
+            kernel_size=kernel_size,
+        )
+
+    def forward(self, x):
+        x = self.channel_attention(x)
+        x = self.spatial_attention(x)
+        return x
+
+
+class ResNet18CBAM(nn.Module):
+    """
+    ResNet18 + CBAM。
+    注意：这个结构必须和训练 CBAM 庭院模型时的结构一致。
+    """
+
+    def __init__(self, num_labels):
+        super().__init__()
+
+        base_model = models.resnet18(weights=None)
+
+        self.conv1 = base_model.conv1
+        self.bn1 = base_model.bn1
+        self.relu = base_model.relu
+        self.maxpool = base_model.maxpool
+
+        self.layer1 = base_model.layer1
+        self.layer2 = base_model.layer2
+        self.layer3 = base_model.layer3
+        self.layer4 = base_model.layer4
+
+        self.cbam = CBAM(in_channels=512)
+
+        self.avgpool = base_model.avgpool
+        self.fc = nn.Linear(512, num_labels)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.cbam(x)
+
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+
+        return x
+
+
+def clean_state_dict(state_dict):
+    """
+    兼容 DataParallel 训练保存的 module.xxx 参数名。
+    """
+    new_state_dict = {}
+
+    for key, value in state_dict.items():
+        if key.startswith("module."):
+            key = key[len("module."):]
+        new_state_dict[key] = value
+
+    return new_state_dict
+
+
+
+# =========================
 # 1. 场景配置
 # =========================
 
 SCENE_CONFIGS = {
     "室内": {
         "aliases": ["室内"],
-        "model_path": "models/courtyard_resnet18_cbam.pth",
+        "model_path": "models/indoor_resnet18.pth",
         "base_score": 10,
         "label_cols": [f"label_{i}" for i in range(10)],
         "label_names": [
@@ -63,7 +211,7 @@ SCENE_CONFIGS = {
 
     "厕所": {
         "aliases": ["厕所", "厕屋"],
-        "model_path": "models/courtyard_resnet18_cbam.pth",
+        "model_path": "models/toilet_resnet18.pth",
         "base_score": None,
         "label_cols": [f"label_{i}" for i in range(2)],
         "label_names": [
@@ -76,7 +224,7 @@ SCENE_CONFIGS = {
 
     "化粪池": {
         "aliases": ["化粪池"],
-        "model_path": "models/courtyard_resnet18_cbam.pth",
+        "model_path": "models/septic_resnet18.pth",
         "base_score": None,
         "label_cols": [f"label_{i}" for i in range(3)],
         "label_names": [
@@ -90,7 +238,7 @@ SCENE_CONFIGS = {
 
     "房前屋后": {
         "aliases": ["房前屋后", "房屋前后", "房前屋后及2侧", "房前屋后及两侧", "屋后", "两侧", "2侧"],
-        "model_path": "models/courtyard_resnet18_cbam.pth",
+        "model_path": "models/outside_resnet18.pth",
         "base_score": 10,
         "label_cols": [f"label_{i}" for i in range(5)],
         "label_names": [
@@ -282,10 +430,23 @@ def find_image_in_folder(folder: Path, scene_key: str):
     return candidates[0]
 
 
-def build_model(num_labels):
-    model = models.resnet18(weights=None)
-    in_features = model.fc.in_features
-    model.fc = nn.Linear(in_features, num_labels)
+def build_model(num_labels, use_cbam=False):
+    """
+    根据模型类型构建网络。
+
+    use_cbam=True：
+        用 ResNet18 + CBAM，加载 courtyard_resnet18_cbam.pth
+
+    use_cbam=False：
+        用普通 ResNet18，加载 indoor/toilet/septic/outside 等普通模型
+    """
+    if use_cbam:
+        model = ResNet18CBAM(num_labels=num_labels)
+    else:
+        model = models.resnet18(weights=None)
+        in_features = model.fc.in_features
+        model.fc = nn.Linear(in_features, num_labels)
+
     return model
 
 
@@ -324,8 +485,36 @@ def load_model_for_scene(scene_key, device):
     thresholds = np.array(checkpoint.get("thresholds", cfg["thresholds"]), dtype=float)
     label_names = checkpoint.get("label_names", cfg["label_names"])
 
-    model = build_model(len(label_names))
-    model.load_state_dict(checkpoint["model_state_dict"])
+    state_dict = clean_state_dict(checkpoint["model_state_dict"])
+
+    # 自动判断模型是不是 CBAM。
+    # 只要 checkpoint 里写了 model_type=resnet18_cbam，或者权重里出现 cbam.xxx，
+    # 就使用 ResNet18CBAM 结构加载。
+    use_cbam = False
+
+    if checkpoint.get("model_type", "") == "resnet18_cbam":
+        use_cbam = True
+
+    for key in state_dict.keys():
+        if key.startswith("cbam."):
+            use_cbam = True
+            break
+
+    model = build_model(
+        num_labels=len(label_names),
+        use_cbam=use_cbam,
+    )
+
+    try:
+        model.load_state_dict(state_dict)
+    except RuntimeError as e:
+        raise RuntimeError(
+            f"{scene_key} 模型加载失败。\n"
+            f"模型路径: {model_path}\n"
+            f"是否使用CBAM结构: {use_cbam}\n"
+            f"原始错误: {e}"
+        )
+
     model.to(device)
     model.eval()
 
@@ -334,10 +523,11 @@ def load_model_for_scene(scene_key, device):
         "deducts": deducts,
         "thresholds": thresholds,
         "label_names": label_names,
+        "use_cbam": use_cbam,
+        "model_path": str(model_path),
     }
 
     return MODEL_CACHE[cache_key]
-
 
 def predict_scene(scene_key, image_path, device):
     model_pack = load_model_for_scene(scene_key, device)
