@@ -1,4 +1,4 @@
-"""
+﻿"""
 房前屋后场景模型训练脚本：带训练过程曲线版本。
 
 功能：
@@ -15,6 +15,11 @@ python -m src.train_outside_70_with_curves --csv data/all_labels.csv --epochs 40
 import argparse
 import copy
 from pathlib import Path
+
+try:
+    from src.output_utils import csv_output_path
+except ModuleNotFoundError:
+    from output_utils import csv_output_path
 
 import numpy as np
 import pandas as pd
@@ -478,7 +483,7 @@ def main():
     if len(train_df) < args.train_num:
         print(f"警告：当前可用房前屋后数据只有 {len(train_df)} 张，不足 {args.train_num} 张")
 
-    holdout_save_path = output_dir / "outside_holdout_rows.csv"
+    holdout_save_path = csv_output_path("outside_holdout_rows.csv")
     holdout_df.drop(columns=["house_sort_key"], errors="ignore").to_csv(
         holdout_save_path,
         index=False,
@@ -663,7 +668,7 @@ def main():
 
         # 每个 epoch 都保存一次 history，训练中断也能保留曲线数据
         history_df = pd.DataFrame(history)
-        history_csv_path = output_dir / f"{args.save_prefix}_training_history.csv"
+        history_csv_path = csv_output_path(f"{args.save_prefix}_training_history.csv")
         history_df.to_csv(history_csv_path, index=False, encoding="utf-8-sig")
 
     print("\n训练结束")
@@ -671,7 +676,7 @@ def main():
     print("模型保存位置:", save_path)
 
     history_df = pd.DataFrame(history)
-    history_csv_path = output_dir / f"{args.save_prefix}_training_history.csv"
+    history_csv_path = csv_output_path(f"{args.save_prefix}_training_history.csv")
     history_df.to_csv(history_csv_path, index=False, encoding="utf-8-sig")
     print("训练历史已保存:", history_csv_path)
 
@@ -692,3 +697,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

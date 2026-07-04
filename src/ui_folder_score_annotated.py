@@ -1,4 +1,4 @@
-import threading
+﻿import threading
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -10,6 +10,11 @@ from PIL import Image, ImageDraw, ImageFont
 import torch
 import torch.nn as nn
 from torchvision import models, transforms
+
+try:
+    from src.output_utils import csv_output_path
+except ModuleNotFoundError:
+    from output_utils import csv_output_path
 
 
 # =========================
@@ -592,7 +597,7 @@ def score_folder(folder: Path, log_fn=None):
         "分差": calc_score_error(total_true_score, total_pred_score),
     }
 
-    save_path = folder / f"ui_score_result_{folder.name}.csv"
+    save_path = csv_output_path(f"ui_score_result_{folder.name}.csv")
     result_df.to_csv(save_path, index=False, encoding="utf-8-sig")
 
     return result_df, label_csv, save_path, annotated_dir, annotated_paths, device
@@ -742,3 +747,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

@@ -1,5 +1,10 @@
-import argparse
+﻿import argparse
 from pathlib import Path
+
+try:
+    from src.output_utils import csv_output_path
+except ModuleNotFoundError:
+    from output_utils import csv_output_path
 
 import numpy as np
 import pandas as pd
@@ -581,9 +586,9 @@ def main():
         print("\n注意：存在缺失的人工标签或图片，无法完整计算总分。")
 
     if args.out is None:
-        out_path = Path(f"folder_score_simple_{house_id}.csv")
+        out_path = csv_output_path(f"folder_score_simple_{house_id}.csv")
     else:
-        out_path = Path(args.out)
+        out_path = csv_output_path(args.out)
 
     result_df.to_csv(out_path, index=False, encoding="utf-8-sig")
 
@@ -592,3 +597,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

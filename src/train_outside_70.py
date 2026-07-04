@@ -1,4 +1,4 @@
-"""
+﻿"""
 房前屋后场景模型训练脚本。
 从 all_labels.csv 中取出前70组（按 house_id 排序）房前屋后数据作为训练集，
 基于 ResNet18 进行多标签分类训练，剩余数据保存为 holdout 验证集。
@@ -12,6 +12,11 @@ pos_weight 处理标签不均衡，保存训练损失最低的模型。
 import argparse
 import copy
 from pathlib import Path
+
+try:
+    from src.output_utils import csv_output_path
+except ModuleNotFoundError:
+    from output_utils import csv_output_path
 
 import numpy as np
 import pandas as pd
@@ -251,8 +256,9 @@ def main():
     if len(train_df) < args.train_num:
         print(f"警告：当前可用房前屋后数据只有 {len(train_df)} 张，不足 {args.train_num} 张")
 
+    holdout_save_path = csv_output_path("outside_holdout_rows.csv")
     holdout_df.drop(columns=["house_sort_key"], errors="ignore").to_csv(
-        "outside_holdout_rows.csv",
+        holdout_save_path,
         index=False,
         encoding="utf-8-sig"
     )
@@ -263,7 +269,7 @@ def main():
     print("房前屋后总图片数量:", len(outside_df))
     print("训练图片数量:", len(train_df))
     print("保留验证图片数量:", len(holdout_df))
-    print("保留验证数据已保存: outside_holdout_rows.csv")
+    print("保留验证数据已保存:", holdout_save_path)
 
     print("\n训练用 house_id:")
     print(train_df["house_id"].tolist())
@@ -362,8 +368,11 @@ def main():
     print("模型保存位置:", save_path)
 
     print("\n下一步你可以用剩余数据验证：")
-    print("outside_holdout_rows.csv")
+    print(holdout_save_path)
 
 
 if __name__ == "__main__":
     main()
+
+
+

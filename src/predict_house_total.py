@@ -1,5 +1,10 @@
-import argparse
+﻿import argparse
 from pathlib import Path
+
+try:
+    from src.output_utils import csv_output_path
+except ModuleNotFoundError:
+    from output_utils import csv_output_path
 
 import numpy as np
 import pandas as pd
@@ -588,14 +593,14 @@ def main():
     print(f"总分误差: {total_pred_score - total_true_score}")
 
     if args.out is None:
-        out_path = Path(f"folder_score_result_{house_id}.csv")
+        out_path = csv_output_path(f"folder_score_result_{house_id}.csv")
     else:
-        out_path = Path(args.out)
+        out_path = csv_output_path(args.out)
 
     if args.detail_out is None:
-        detail_out_path = Path(f"folder_score_detail_{house_id}.csv")
+        detail_out_path = csv_output_path(f"folder_score_detail_{house_id}.csv")
     else:
-        detail_out_path = Path(args.detail_out)
+        detail_out_path = csv_output_path(args.detail_out)
 
     summary_df.to_csv(out_path, index=False, encoding="utf-8-sig")
     detail_df.to_csv(detail_out_path, index=False, encoding="utf-8-sig")
@@ -606,3 +611,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

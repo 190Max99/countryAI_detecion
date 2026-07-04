@@ -1,4 +1,4 @@
-# 农户环境照片 AI 积分制评分系统
+﻿# 农户环境照片 AI 积分制评分系统
 
 本项目面向农村人居环境积分制评分场景，基于现场采集的农户环境照片，对室内、庭院、厕所、化粪池、房前屋后等场景中的扣分项进行自动识别，并按照人工评分细则生成扣分结果、场景得分和总分。
 
@@ -17,6 +17,93 @@
 - 支持后续阈值调整、模型替换和人工复核。
 
 系统的核心思路不是让 AI 直接输出最终分数，而是先识别每张照片中是否存在具体扣分项，再根据人工评分标准计算得分。这样可以保证评分过程具有较好的可解释性，方便现场展示、人工复核和后续优化。
+
+---
+
+## 快速开始
+
+### 1. 准备环境
+
+建议在项目根目录创建并激活虚拟环境：
+
+```powershell
+cd D:\desktop\countryside_score
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+如果需要生成 Excel 测评报告，请额外确认已安装 `openpyxl`：
+
+```powershell
+pip install openpyxl
+```
+
+### 2. 准备数据和模型
+
+运行前请确认以下本地目录已经存在：
+
+```text
+data/raw/               # 每户农户照片和单户人工标注 CSV
+data/all_labels.csv     # 训练和批量评估使用的总标注表
+models/*.pth            # 训练好的模型权重
+```
+
+每户文件夹建议采用如下结构：
+
+```text
+data/raw/97/
+├── 97.csv
+├── 室内_97.jpg
+├── 庭院_97.jpg
+├── 厕所_97.jpg
+├── 化粪池_97.jpg
+└── 房前屋后_97.jpg
+```
+
+其中 `97.csv` 用于计算人工实际得分，图片用于模型预测。系统会按场景名称或别名自动匹配对应图片。
+
+### 3. 推荐运行入口
+
+**现场演示推荐使用多标签 Grad-CAM UI：**
+
+```powershell
+python -m src.ui_folder_score_annotated_gradcam_multi
+```
+
+打开界面后选择某个农户文件夹，例如 `data/raw/97`，点击开始评分。程序会输出：
+
+```text
+outputs/csv/ui_score_result_97.csv  # 场景得分、预测分、分差
+data/raw/97/annotated/              # 扣分项文字标注图
+data/raw/97/gradcam/                # Grad-CAM 热力图
+```
+
+**命令行整户评分：**
+
+```powershell
+python -m src.predict_folder_total --folder data/raw/97
+```
+
+**批量生成评估报告：**
+
+```powershell
+python -m src.eval_scene_score_accuracy_excel --root data/raw --output outputs/scene_score_accuracy_report.xlsx
+python -m src.eval_label_mismatch_by_scene_excel --root data/raw --output outputs/label_mismatch_report.xlsx
+```
+
+### 4. 常用脚本速查
+
+| 场景 | 命令 |
+| ---- | ---- |
+| 运行完整 UI（推荐） | `python -m src.ui_folder_score_annotated_gradcam_multi` |
+| 命令行整户评分 | `python -m src.predict_folder_total --folder data/raw/97` |
+| 整理总标注表 | `python scripts/build_dataset.py` |
+| 训练室内模型 | `python -m src.train_test_indoor --csv data/all_labels.csv --epochs 30` |
+| 训练庭院 CBAM 模型 | `python -m src.train_courtyard_cbam_70 --csv data/all_labels.csv --epochs 30` |
+| 训练房前屋后模型并保存曲线 | `python -m src.train_outside_70_with_curves --csv data/all_labels.csv --epochs 30` |
+| 生成场景得分准确率报告 | `python -m src.eval_scene_score_accuracy_excel --root data/raw --output outputs/scene_score_accuracy_report.xlsx` |
+| 生成标签不一致分析报告 | `python -m src.eval_label_mismatch_by_scene_excel --root data/raw --output outputs/label_mismatch_report.xlsx` |
 
 ---
 
@@ -823,3 +910,4 @@ UI 界面现场演示
 ```
 
 本系统适合作为农村人居环境现场评分的 AI 初评工具，也可以作为后续目标检测、自动标注和智能巡检系统的基础版本。
+

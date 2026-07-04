@@ -1,5 +1,10 @@
-import argparse
+﻿import argparse
 from pathlib import Path
+
+try:
+    from src.output_utils import CSV_OUTPUT_DIR, csv_output_path
+except ModuleNotFoundError:
+    from output_utils import CSV_OUTPUT_DIR, csv_output_path
 
 import numpy as np
 import pandas as pd
@@ -20,22 +25,26 @@ def read_csv_safely(csv_path: Path):
 
 def collect_score_results(root_dir: Path):
     """
-    扫描 data/raw 下每个农户文件夹中的 ui_score_result_xxx.csv
+    优先扫描 outputs/csv 下的 ui_score_result_xxx.csv，兼容旧版 data/raw/*/ui_score_result_xxx.csv。
     汇总为一个总表。
     """
 
     all_rows = []
+    result_files = []
+
+    if CSV_OUTPUT_DIR.exists():
+        result_files.extend(sorted(CSV_OUTPUT_DIR.glob("ui_score_result_*.csv")))
 
     for folder in sorted(root_dir.iterdir(), key=lambda p: p.name):
-        if not folder.is_dir():
+        if folder.is_dir():
+            result_files.extend(sorted(folder.glob("ui_score_result_*.csv")))
+
+    seen_paths = set()
+
+    for result_file in result_files:
+        if result_file in seen_paths:
             continue
-
-        result_files = sorted(folder.glob("ui_score_result_*.csv"))
-
-        if len(result_files) == 0:
-            continue
-
-        result_file = result_files[0]
+        seen_paths.add(result_file)
 
         try:
             df = read_csv_safely(result_file)
@@ -43,7 +52,7 @@ def collect_score_results(root_dir: Path):
             print(f"跳过 {result_file}: {e}")
             continue
 
-        house_id = folder.name
+        house_id = result_file.stem.replace("ui_score_result_", "")
 
         for _, row in df.iterrows():
             item = str(row.get("项目", ""))
@@ -77,10 +86,7 @@ def collect_score_results(root_dir: Path):
                 "result_file": str(result_file),
             })
 
-    result_df = pd.DataFrame(all_rows)
-
-    return result_df
-
+    return pd.DataFrame(all_rows)
 
 def plot_total_score_curve(df: pd.DataFrame, output_dir: Path):
     """
@@ -295,7 +301,7 @@ def main():
         print("没有找到任何 ui_score_result_*.csv，请先运行 UI 对农户文件夹评分。")
         return
 
-    summary_path = output_dir / "score_error_summary.csv"
+    summary_path = csv_output_path("score_error_summary.csv")
     df.to_csv(summary_path, index=False, encoding="utf-8-sig")
 
     print(f"已保存汇总表：{summary_path}")
@@ -311,3 +317,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+

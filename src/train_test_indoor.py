@@ -1,4 +1,4 @@
-"""
+﻿"""
 室内场景模型训练与测试脚本。
 从 all_labels.csv 中筛选 scene=室内 的数据，按 8:2 划分训练/测试集，
 基于 ResNet18 进行多标签分类训练，每轮在测试集上评估并保存最佳模型。
@@ -9,6 +9,11 @@
 import argparse
 import copy
 from pathlib import Path
+
+try:
+    from src.output_utils import csv_output_path
+except ModuleNotFoundError:
+    from output_utils import csv_output_path
 
 import numpy as np
 import pandas as pd
@@ -445,7 +450,7 @@ def main():
         y_true,
         y_prob,
         y_pred,
-        "indoor_test_result.csv"
+        csv_output_path("indoor_test_result.csv")
     )
 
     print("\n最终测试结果:")
@@ -456,3 +461,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

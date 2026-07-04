@@ -1,6 +1,11 @@
-import argparse
+﻿import argparse
 import copy
 from pathlib import Path
+
+try:
+    from src.output_utils import csv_output_path
+except ModuleNotFoundError:
+    from output_utils import csv_output_path
 
 import numpy as np
 import pandas as pd
@@ -231,8 +236,9 @@ def main():
     if len(train_df) < args.train_num:
         print(f"警告：当前可用庭院数据只有 {len(train_df)} 张，不足 {args.train_num} 张")
 
+    holdout_save_path = csv_output_path("courtyard_holdout_rows.csv")
     holdout_df.drop(columns=["house_sort_key"], errors="ignore").to_csv(
-        "courtyard_holdout_rows.csv",
+        holdout_save_path,
         index=False,
         encoding="utf-8-sig"
     )
@@ -243,7 +249,7 @@ def main():
     print("庭院总图片数量:", len(courtyard_df))
     print("训练图片数量:", len(train_df))
     print("保留验证图片数量:", len(holdout_df))
-    print("保留验证数据已保存: courtyard_holdout_rows.csv")
+    print("保留验证数据已保存:", holdout_save_path)
 
     print("\n训练用 house_id:")
     print(train_df["house_id"].tolist())
@@ -340,8 +346,11 @@ def main():
     print("模型保存位置:", save_path)
 
     print("\n下一步可以用剩余数据验证：")
-    print("courtyard_holdout_rows.csv")
+    print(holdout_save_path)
 
 
 if __name__ == "__main__":
     main()
+
+
+

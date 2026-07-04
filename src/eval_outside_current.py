@@ -1,5 +1,10 @@
-import argparse
+﻿import argparse
 from pathlib import Path
+
+try:
+    from src.output_utils import csv_output_path
+except ModuleNotFoundError:
+    from output_utils import csv_output_path
 
 import numpy as np
 import pandas as pd
@@ -195,7 +200,8 @@ def main():
     y_pred = np.array(all_pred)
 
     result_df = pd.DataFrame(result_rows)
-    result_df.to_csv(args.out, index=False, encoding="utf-8-sig")
+    out_path = csv_output_path(args.out)
+    result_df.to_csv(out_path, index=False, encoding="utf-8-sig")
 
     label_acc = (y_true == y_pred).mean()
     exact_match = np.mean([np.array_equal(t, p) for t, p in zip(y_true, y_pred)])
@@ -214,7 +220,7 @@ def main():
     print("Macro Precision:", round(macro_precision, 4))
     print("Macro Recall:", round(macro_recall, 4))
     print("平均得分误差:", round(mean_score_error, 4))
-    print("详细结果已保存:", args.out)
+    print("详细结果已保存:", out_path)
 
     print("\n========== 各标签 F1 ==========")
     for i, name in enumerate(label_names):
@@ -241,3 +247,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

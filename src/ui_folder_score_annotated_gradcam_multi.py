@@ -14,6 +14,11 @@ import torch
 import torch.nn as nn
 from torchvision import models, transforms
 
+try:
+    from src.output_utils import csv_output_path
+except ModuleNotFoundError:
+    from output_utils import csv_output_path
+
 
 # =========================
 # 1. 场景配置
@@ -1180,7 +1185,7 @@ def score_folder(folder: Path, log_fn=None):
         "分差": calc_score_error(total_true_score, total_pred_score),
     }
 
-    save_path = folder / f"ui_score_result_{folder.name}.csv"
+    save_path = csv_output_path(f"ui_score_result_{folder.name}.csv")
     result_df.to_csv(save_path, index=False, encoding="utf-8-sig")
 
     return result_df, label_csv, save_path, annotated_dir, gradcam_dir, annotated_paths, gradcam_paths_all, device
@@ -1194,87 +1199,163 @@ class ScoreApp:
     def __init__(self, root):
         self.root = root
         self.root.title("AI积分制现场照片评分系统")
-        self.root.geometry("1120x680")
+        self.root.geometry("1180x760")
+        self.root.minsize(1040, 680)
+        self.root.configure(bg="#f3f8ff")
 
         self.selected_folder = None
         self.annotated_dir = None
         self.gradcam_dir = None
 
+        self.init_styles()
+
+        app = tk.Frame(root, bg="#f3f8ff")
+        app.pack(fill="both", expand=True, padx=24, pady=20)
+        app.columnconfigure(0, weight=1)
+        app.rowconfigure(2, weight=1)
+
+        header = tk.Frame(app, bg="#f3f8ff")
+        header.grid(row=0, column=0, sticky="ew")
+        header.columnconfigure(0, weight=1)
+
         title = tk.Label(
-            root,
+            header,
             text="AI积分制现场照片评分系统",
-            font=("Microsoft YaHei", 18, "bold")
+            bg="#f3f8ff",
+            fg="#15345b",
+            font=("Microsoft YaHei UI", 22, "bold")
         )
+        title.grid(row=0, column=0, sticky="w")
 
-        title.pack(pady=12)
+        subtitle = tk.Label(
+            header,
+            text="现场照片自动评分 · 文字标注图 · Grad-CAM 热力图",
+            bg="#f3f8ff",
+            fg="#60758f",
+            font=("Microsoft YaHei UI", 10)
+        )
+        subtitle.grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-        top_frame = tk.Frame(root)
-        top_frame.pack(fill="x", padx=20)
+        toolbar = tk.Frame(app, bg="#ffffff", highlightthickness=1, highlightbackground="#d8e6f7")
+        toolbar.grid(row=1, column=0, sticky="ew", pady=(18, 16), ipady=12, ipadx=14)
+        toolbar.columnconfigure(0, weight=1)
 
         self.folder_label = tk.Label(
-            top_frame,
+            toolbar,
             text="当前未选择文件夹",
             anchor="w",
-            font=("Microsoft YaHei", 10)
+            bg="#ffffff",
+            fg="#26384f",
+            font=("Microsoft YaHei UI", 10)
         )
+        self.folder_label.grid(row=0, column=0, sticky="ew", padx=(14, 16))
 
-        self.folder_label.pack(side="left", fill="x", expand=True)
+        button_bar = tk.Frame(toolbar, bg="#ffffff")
+        button_bar.grid(row=0, column=1, sticky="e", padx=(0, 14))
 
-        choose_btn = tk.Button(
-            top_frame,
-            text="选择农户文件夹",
-            command=self.choose_folder,
-            width=16,
-            font=("Microsoft YaHei", 10)
-        )
-
-        choose_btn.pack(side="right", padx=5)
-
-        run_btn = tk.Button(
-            top_frame,
-            text="开始评分",
-            command=self.run_score_thread,
-            width=12,
-            font=("Microsoft YaHei", 10)
-        )
-
-        run_btn.pack(side="right", padx=5)
-
-        open_annotated_btn = tk.Button(
-            top_frame,
-            text="打开标注图",
-            command=self.open_annotated_folder,
-            width=12,
-            font=("Microsoft YaHei", 10)
-        )
-
-        open_annotated_btn.pack(side="right", padx=5)
-
-        open_gradcam_btn = tk.Button(
-            top_frame,
-            text="打开热力图",
-            command=self.open_gradcam_folder,
-            width=12,
-            font=("Microsoft YaHei", 10)
-        )
-
-        open_gradcam_btn.pack(side="right", padx=5)
+        self.make_button(button_bar, "选择农户文件夹", self.choose_folder, "Accent.TButton").pack(side="left", padx=(0, 8))
+        self.make_button(button_bar, "开始评分", self.run_score_thread, "Primary.TButton").pack(side="left", padx=(0, 8))
+        self.make_button(button_bar, "打开标注图", self.open_annotated_folder, "Soft.TButton").pack(side="left", padx=(0, 8))
+        self.make_button(button_bar, "打开热力图", self.open_gradcam_folder, "Soft.TButton").pack(side="left")
 
         columns = ["项目", "满分", "实际扣分", "预测扣分", "实际得分", "预测得分", "分差"]
 
-        self.tree = ttk.Treeview(root, columns=columns, show="headings", height=8)
-        self.tree.pack(fill="both", expand=True, padx=20, pady=16)
+        table_frame = tk.Frame(app, bg="#ffffff", highlightthickness=1, highlightbackground="#d8e6f7")
+        table_frame.grid(row=2, column=0, sticky="nsew")
+        table_frame.columnconfigure(0, weight=1)
+        table_frame.rowconfigure(1, weight=1)
+
+        table_title = tk.Label(
+            table_frame,
+            text="评分结果",
+            anchor="w",
+            bg="#ffffff",
+            fg="#15345b",
+            font=("Microsoft YaHei UI", 12, "bold")
+        )
+        table_title.grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 8))
+
+        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=8, style="Score.Treeview")
+        self.tree.grid(row=1, column=0, sticky="nsew", padx=(16, 0), pady=(0, 16))
+
+        tree_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        tree_scroll.grid(row=1, column=1, sticky="ns", padx=(0, 16), pady=(0, 16))
+        self.tree.configure(yscrollcommand=tree_scroll.set)
 
         for col in columns:
             self.tree.heading(col, text=col)
             self.tree.column(col, anchor="center", width=130)
 
-        self.status_text = tk.Text(root, height=13, font=("Consolas", 10))
-        self.status_text.pack(fill="x", padx=20, pady=8)
+        self.tree.column("项目", anchor="w", width=160)
+        self.tree.tag_configure("odd", background="#f7fbff")
+        self.tree.tag_configure("even", background="#ffffff")
+        self.tree.tag_configure("total", background="#e4f0ff", foreground="#15345b")
+
+        log_frame = tk.Frame(app, bg="#18263a", highlightthickness=1, highlightbackground="#2a3d5c")
+        log_frame.grid(row=3, column=0, sticky="ew", pady=(16, 0))
+        log_frame.columnconfigure(0, weight=1)
+
+        log_title = tk.Label(
+            log_frame,
+            text="运行日志",
+            anchor="w",
+            bg="#18263a",
+            fg="#dbeafe",
+            font=("Microsoft YaHei UI", 11, "bold")
+        )
+        log_title.grid(row=0, column=0, sticky="ew", padx=14, pady=(12, 4))
+
+        self.status_text = tk.Text(
+            log_frame,
+            height=10,
+            bg="#102033",
+            fg="#dbeafe",
+            insertbackground="#dbeafe",
+            relief="flat",
+            borderwidth=0,
+            padx=12,
+            pady=10,
+            font=("Consolas", 10)
+        )
+        self.status_text.grid(row=1, column=0, sticky="ew", padx=(14, 0), pady=(0, 14))
+
+        log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.status_text.yview)
+        log_scroll.grid(row=1, column=1, sticky="ns", padx=(0, 14), pady=(0, 14))
+        self.status_text.configure(yscrollcommand=log_scroll.set)
 
         self.log("请选择一个农户文件夹，例如 data/raw/97。")
         self.log("评分完成后，会生成 annotated 文字标注图和 gradcam 热力图。")
         self.log("gradcam 文件夹中包含单项热力图和多标签综合热力图。")
+
+    def init_styles(self):
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure(
+            "Score.Treeview",
+            background="#ffffff",
+            fieldbackground="#ffffff",
+            foreground="#24364f",
+            borderwidth=0,
+            rowheight=34,
+            font=("Microsoft YaHei UI", 10)
+        )
+        style.configure(
+            "Score.Treeview.Heading",
+            background="#e8f2ff",
+            foreground="#15345b",
+            relief="flat",
+            font=("Microsoft YaHei UI", 10, "bold")
+        )
+        style.map("Score.Treeview", background=[("selected", "#3b82f6")], foreground=[("selected", "#ffffff")])
+        style.configure("Primary.TButton", font=("Microsoft YaHei UI", 10, "bold"), padding=(14, 8), background="#3b82f6", foreground="#ffffff", borderwidth=0)
+        style.configure("Accent.TButton", font=("Microsoft YaHei UI", 10), padding=(14, 8), background="#e8f2ff", foreground="#15345b", borderwidth=0)
+        style.configure("Soft.TButton", font=("Microsoft YaHei UI", 10), padding=(14, 8), background="#f4f8ff", foreground="#26384f", borderwidth=0)
+        style.map("Primary.TButton", background=[("active", "#2563eb")], foreground=[("active", "#ffffff")])
+        style.map("Accent.TButton", background=[("active", "#d9e9ff")])
+        style.map("Soft.TButton", background=[("active", "#eaf3ff")])
+
+    def make_button(self, parent, text, command, style):
+        return ttk.Button(parent, text=text, command=command, style=style)
 
     def safe_call(self, func, *args, **kwargs):
         self.root.after(0, lambda: func(*args, **kwargs))
@@ -1318,7 +1399,7 @@ class ScoreApp:
     def insert_results(self, result_df):
         self.clear_table()
 
-        for _, row in result_df.iterrows():
+        for index, row in result_df.iterrows():
             values = [
                 row["项目"],
                 self.format_value(row["满分"]),
@@ -1329,7 +1410,8 @@ class ScoreApp:
                 self.format_value(row["分差"]),
             ]
 
-            self.tree.insert("", "end", values=values)
+            tag = "total" if row["项目"] == "总分" else ("even" if index % 2 == 0 else "odd")
+            self.tree.insert("", "end", values=values, tags=(tag,))
 
     def run_score(self):
         try:
@@ -1398,3 +1480,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
