@@ -99,6 +99,7 @@ python -m src.eval_label_mismatch_by_scene_excel --root data/raw --output output
 | 运行完整 UI（推荐） | `python -m src.ui_folder_score_annotated_gradcam_multi` |
 | 命令行整户评分 | `python -m src.predict_folder_total --folder data/raw/97` |
 | 整理总标注表 | `python scripts/build_dataset.py` |
+| 一口气训练所有模型 | `python -m src.train_all_models --csv data/all_labels.csv --epochs 30 --train_num 70` |
 | 训练室内模型 | `python -m src.train_test_indoor --csv data/all_labels.csv --epochs 30` |
 | 训练庭院 CBAM 模型 | `python -m src.train_courtyard_cbam_70 --csv data/all_labels.csv --epochs 30` |
 | 训练房前屋后模型并保存曲线 | `python -m src.train_outside_70_with_curves --csv data/all_labels.csv --epochs 30` |
@@ -382,6 +383,7 @@ countryside_score/
 │   ├── train_courtyard_cbam_70.py                # 庭院 ResNet18 + CBAM 训练
 │   ├── train_toilet_70.py                        # 厕所模型训练
 │   ├── train_septic_70.py                        # 化粪池模型训练
+│   ├── train_all_models.py                       # 一口气顺序训练所有模型
 │   │
 │   ├── eval_indoor_current.py                    # 室内模型全量验证
 │   ├── eval_outside_holdout.py                   # 房前屋后保留集测评
@@ -534,8 +536,35 @@ house_id,scene,image_path,label_0,label_1,label_2,label_3,label_4,label_5,label_
 ## 九、训练各场景模型
 
 > 训练和预测建议始终在项目根目录运行，使用 `python -m src.xxx` 方式调用。
+### 9.1 一口气训练所有模型
 
-### 9.1 室内模型训练
+默认会按顺序训练：室内、房前屋后（带训练曲线）、普通庭院、庭院 CBAM、厕所、化粪池。
+
+```powershell
+python -m src.train_all_models --csv data/all_labels.csv --epochs 30 --train_num 70
+```
+
+常用可选参数：
+
+```powershell
+# 只训练部分模型
+python -m src.train_all_models --only indoor,outside,courtyard_cbam
+
+# 跳过部分模型
+python -m src.train_all_models --skip courtyard
+
+# 某个模型失败后继续训练后面的模型
+python -m src.train_all_models --continue_on_error
+
+# 只查看将要执行的命令，不真正训练
+python -m src.train_all_models --dry_run
+```
+
+可选模型名称：`indoor`、`outside`、`courtyard`、`courtyard_cbam`、`toilet`、`septic`。
+
+---
+
+### 9.2 室内模型训练
 
 室内场景对应 A0 ~ A9，共 10 个标签。
 
@@ -547,7 +576,7 @@ python -m src.train_test_indoor --csv data/all_labels.csv --epochs 30
 
 ---
 
-### 9.2 房前屋后模型训练
+### 9.3 房前屋后模型训练
 
 房前屋后场景对应 D0 ~ D4，共 5 个标签。
 
@@ -569,7 +598,7 @@ python -m src.train_outside_70_with_curves --csv data/all_labels.csv --epochs 40
 
 ---
 
-### 9.3 普通庭院模型训练
+### 9.4 普通庭院模型训练
 
 庭院场景对应 B0 ~ B11，共 12 个标签。
 
@@ -581,7 +610,7 @@ python -m src.train_courtyard_70 --csv data/all_labels.csv --epochs 30 --train_n
 
 ---
 
-### 9.4 庭院 ResNet18 + CBAM 模型训练
+### 9.5 庭院 ResNet18 + CBAM 模型训练
 
 为提升复杂庭院场景下局部扣分项识别效果，支持训练带 CBAM 注意力模块的庭院模型。
 
@@ -593,7 +622,7 @@ python -m src.train_courtyard_cbam_70 --csv data/all_labels.csv --epochs 40 --tr
 
 ---
 
-### 9.5 厕所模型训练
+### 9.6 厕所模型训练
 
 厕所模型对应 2 个标签：C0（厕屋脏乱）、C1（厕屋功能配备不齐全）。
 
@@ -605,7 +634,7 @@ python -m src.train_toilet_70 --csv data/all_labels.csv --epochs 30 --train_num 
 
 ---
 
-### 9.6 化粪池模型训练
+### 9.7 化粪池模型训练
 
 化粪池模型对应 3 个标签：化粪池盖板未关闭、粪污溢流、厕所周围其他情况。
 
