@@ -654,7 +654,7 @@ def format_excel(output_path: Path, sheets: dict):
                 for cell in row:
                     header = ws.cell(row=1, column=cell.column).value
                     if header and ("率" in str(header) or str(header) in ["Precision_扣分精确率", "Recall_扣分召回率", "F1"]):
-                        cell.number_format = "0.00%"
+                        cell.number_format = "0.00"
                     elif header and ("概率" in str(header) or str(header) == "阈值"):
                         cell.number_format = "0.000"
 
