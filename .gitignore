@@ -22,14 +22,18 @@ data/*.csv
 !data/sample/
 !data/sample/*.csv
 
-# models
-models/
+# models — only track scene classifier
+models/*
+!models/scene_resnet18_feature_extractor.pth
+!models/scene_classifier_resnet18.pkl
 *.pth
+!models/scene_resnet18_feature_extractor.pth
 *.pt
 *.onnx
 
 # outputs / results
 outputs/
+dist/
 *_result.csv
 *_eval*.csv
 outside_holdout_rows.csv
